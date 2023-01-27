@@ -15,8 +15,12 @@ async function executionOne(delay = 100) {
 }
 
 async function main() {
-  mutex.setMaxConcurrentTaskForTopic("globalCounter", 2);
+  mutex.setMaxConcurrentTaskForTopic("globalCounter", 1);
   mutex.setMaxQueueSizeForTopic("globalCounter", 10);
+  mutex.getState().eventEmitter.once(`TASK_HAS_FINISHED:topic::globalCounter`, () => {
+    console.log("Hereeeeee687464134563");
+  });
+
   await Promise.all([
     mutex
       .aquire(

@@ -138,6 +138,7 @@ class Mutex {
         return __awaiter(this, void 0, void 0, function* () {
             ////////////////////// function definitions ///////////////////////////
             let timerId = null;
+            const topic = `${this.TASK_HAS_FINISHED}:topic::${key}`;
             const finalizeTask = (task) => {
                 clearTimeout(timerId);
                 if (task.finished)
@@ -163,7 +164,6 @@ class Mutex {
                     });
                 });
             };
-            const topic = `${this.TASK_HAS_FINISHED}:topic::${key}`;
             const queueTask = (_a = this.mapOfTasks) === null || _a === void 0 ? void 0 : _a.get(key);
             if (!queueTask)
                 throw new Error("Fatal error");

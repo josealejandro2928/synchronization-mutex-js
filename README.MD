@@ -1,2 +1,3 @@
-#
-This code defines a Mutex class, which is used to control access to a shared resource by multiple concurrent processes. It uses a Map to track different tasks, identified by a topic string. Each task is a function that is passed to the aquire method and added to the appropriate topic's queue. The enqueue method is then called to process the tasks in the queue, ensuring that only a certain number of tasks are running concurrently and that the queue does not exceed a certain size. The class also includes methods to set the maximum queue size for a specific topic or globally, and to set the maximum number of concurrent tasks.
+# synchronization-mutex-js
+
+The synchronization-mutex-js package provides a `Mutex` class. This class gives a way to run async functions in a mutually exclusive manner by using a queue system. It allows you to set a maximum number of concurrent tasks for a given topic and a maximum queue size for a given topic.

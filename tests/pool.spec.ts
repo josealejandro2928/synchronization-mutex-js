@@ -1,196 +1,250 @@
-import { Pool } from '../src/index';
+import { Mutex, QueueOverFlowError, TimeoutError } from "../lib/index";
 
-describe('Pool', () => {
-  let pool: Pool = new Pool(4);
+describe("Pool", () => {
+  let mutex: Mutex;
+  const TOPIC1 = "TOPIC1";
+  const TOPIC2 = "TOPIC2";
+  const delayMs = (ms = 1000) => new Promise(res => setTimeout(res, ms));
 
-  test('exec should return result of task', async () => {
-    const task = () => 'hello world';
-    const result = await pool.exec(task);
-    expect(result).toBe('hello world');
+  beforeEach(() => {
+    mutex = new Mutex();
   });
 
-  test('exec should pass task arguments', async () => {
-    const task = (a: number, b: number) => a + b;
-    const result = await pool.exec(task, [1, 2]);
-    expect(result).toBe(3);
+  test("aquire should return result of task", async () => {
+    const task = () => "hello world";
+    const result = await mutex.aquire(TOPIC1, () => {
+      return task();
+    });
+    expect(result).toBe("hello world");
   });
 
-  it('should enqueue and dequeue a task', async () => {
-    const add = (a: number, b: number) => a + b;
-    const result = await pool.exec(add, [1, 2]);
-    expect(result).toBe(3);
-  });
-
-  it('should correctly handle errors', async () => {
-    const throwError = () => {
-      throw new Error('Some error');
-    };
-    try {
-      await pool.exec(throwError);
-    } catch (error: any) {
-      expect(error.message).toContain('Some error');
-    }
-  });
-
-  test('exec should throw error if task throws', async () => {
+  test("aquire should handle the error", async () => {
     const task = () => {
-      throw new Error('test error');
+      throw new Error("Custom Error");
     };
-    await expect(pool.exec(task)).rejects.toThrow('test error');
+    await expect(
+      mutex.aquire(TOPIC1, () => {
+        return task();
+      })
+    ).rejects.toThrow("Custom Error");
   });
 
-  test('setMaxWorkers should update max workers', () => {
-    pool.setMaxWorkers(8);
-    expect(pool.maxWorker).toBe(8);
-  });
-
-  it('should limit the number of workers', async () => {
-    jest.setTimeout(6000);
-    pool.setMaxWorkers(2);
-    const slowAdd = (a: number, b: number) =>
-      new Promise((resolve) => setTimeout(() => resolve(a + b), 50));
-    const addPromises = Array.from({ length: 5 }, (_, i) => pool.exec(slowAdd, [i, i + 1]));
-    expect(pool.getState().runningTasks.length == 2);
-    expect(pool.getState().taskQueue.length == 3);
-    let taskWaiting = pool.getState().taskQueue.map((t) => t.args);
-    expect(taskWaiting).toEqual([
-      [2, 3],
-      [3, 4],
-      [4, 5],
-    ]);
-    const results = await Promise.all(addPromises);
-    expect(results).toEqual([1, 3, 5, 7, 9]);
-  });
-
-  test('exec should add tasks to task queue if all workers are busy', async () => {
-    const task = () => 'hello world';
-    pool.setMaxWorkers(4);
-    const taskPromise1 = pool.exec(task);
-    const taskPromise2 = pool.exec(task);
-    const taskPromise3 = pool.exec(task);
-    const taskPromise4 = pool.exec(task);
-    const taskPromise5 = pool.exec(task);
-    expect(pool.getState().taskQueue.length).toBe(1);
-    await Promise.all([taskPromise1, taskPromise2, taskPromise3, taskPromise4, taskPromise5]);
-  });
-
-  it('should remove subscribers once the event is emitted', async () => {
-    const add = (a: number, b: number) => a + b;
-    const spy = jest.fn();
-    pool.getEventEmmiter().once('TASK_COMPLETED_TOPIC', spy);
-    await pool.exec(add, [1, 2]);
-    await pool.exec(add, [3, 4]);
-    expect(spy).toHaveBeenCalledTimes(1);
-  });
-
-  it('should not start new tasks if all workers are busy', async () => {
-    pool.setMaxWorkers(1);
-    const slowAdd = (a: number, b: number) =>
-      new Promise((resolve) => setTimeout(() => resolve(a + b), 200));
-    const addPromise1 = pool.exec(slowAdd, [1, 2]);
-    let startTime = Date.now();
-    const addPromise2 = pool.exec(slowAdd, [3, 4]);
-    let endTime = Date.now();
-    expect(endTime - startTime).toBeLessThanOrEqual(10);
-    startTime = Date.now();
-    const results = await Promise.all([addPromise1, addPromise2]);
-    endTime = Date.now();
-    expect(results).toEqual([3, 7]);
-    expect(endTime - startTime).toBeGreaterThanOrEqual(400);
-  });
-
-  it('should run tasks concurrently', async () => {
-    pool.setMaxWorkers(2);
-    const slowAdd = (a: number, b: number) =>
-      new Promise((resolve) => setTimeout(() => resolve(a + b), 200));
-    const addPromise1 = pool.exec(slowAdd, [1, 2]);
-    const addPromise2 = pool.exec(slowAdd, [3, 4]);
-    let startTime = Date.now();
-    const results = await Promise.all([addPromise1, addPromise2]);
-    let endTime = Date.now();
-    expect(results).toEqual([3, 7]);
-    expect(endTime - startTime).toBeLessThanOrEqual(300);
-  });
-
-  it('showState should log the state of the pool', async () => {
-    const logSpy = jest.spyOn(global.console, 'log');
-    pool.showState();
-    expect(logSpy).toHaveBeenCalled();
-    expect(logSpy).toHaveBeenCalledTimes(5);
-    let args = logSpy.mock.calls.map((arg) => arg[0]);
-    expect(args).toContain('taskQueue:');
-    expect(args).toContain('runninTask:');
-    expect(args).toContain('subscritors:');
-  });
-
-  it('should start new tasks if any worker finishes', async () => {
-    pool.setMaxWorkers(1);
-    const slowAdd = (a: number, b: number) =>
-      new Promise((resolve) => setTimeout(() => resolve(a + b), 100));
-    const fastAdd = (a: number, b: number) => a + b;
-    const addPromise1 = pool.exec(slowAdd, [1, 2]);
-    const startTime = Date.now();
-    const addPromise2 = pool.exec(fastAdd, [3, 4]);
-    const endTime = Date.now();
-    expect(endTime - startTime).toBeLessThan(1000);
-    const results = await Promise.all([addPromise1, addPromise2]);
-    expect(results).toEqual([3, 7]);
-  });
-
-  it('should not have memory leaks', async () => {
-    pool.setMaxWorkers(4);
-    let startHeapUsed = process.memoryUsage().heapUsed;
-    let initialMemoryUsage = process.memoryUsage();
-    let data: any = await Promise.all([
-      pool.exec(() => {}),
-      pool.exec(() => {}),
-      pool.exec(() => {}),
-      pool.exec(() => {}),
-      pool.exec(() => {}),
-      pool.exec(() => {}),
-      pool.exec(() => {}),
-      pool.exec(() => {}),
-      pool.exec(() => {}),
-      pool.exec(() => {}),
-    ]);
-    expect(data).toHaveLength(10);
-    let memoryDiff = process.memoryUsage().heapUsed - initialMemoryUsage.heapUsed;
-    expect(memoryDiff).toBeLessThan(1024 * 1024 * 5); // 5MB
- 
-    initialMemoryUsage = process.memoryUsage();
-
-    const memoryLeak = (delayMs = 100): Promise<number> => {
-      const EventEmitter = require('events');
-      const eventEmitter = new EventEmitter();
-      let start = performance.now();
-      return new Promise((res) => {
-        eventEmitter.on('finish', () => {
-          res(performance.now() - start);
-        });
-        setTimeout(() => {
-          eventEmitter.emit('finish');
-        }, delayMs);
-      });
+  test("aquire should add a new task to the topic", () => {
+    const cb = async () => {
+      await delayMs(50);
     };
 
-    data = await Promise.all([
-      pool.exec(memoryLeak, [150]),
-      pool.exec(memoryLeak, [250]),
-      pool.exec(memoryLeak, [250]),
-      pool.exec(memoryLeak, [80]),
-      pool.exec(memoryLeak, [80]),
-      pool.exec(memoryLeak, [110]),
-      pool.exec(memoryLeak, [110]),
-      pool.exec(memoryLeak, [110]),
-      pool.exec(memoryLeak, [110]),
-      pool.exec(memoryLeak, [110]),
-    ]);
-    for (let el of data) {
-      expect(el).toBeLessThanOrEqual(el + 10);
+    mutex.aquire(TOPIC1, cb);
+    expect(mutex.getState().mapOfTasks.get(TOPIC1)?.queue.length).toBe(0);
+    expect(mutex.getState().mapOfTasks.get(TOPIC1)?.runningTask.size).toBe(1);
+  });
+
+  test("setMaxQueueSizeForTopic should set the max queue size for topic", () => {
+    mutex.setMaxQueueSizeForTopic(TOPIC1, 10);
+    expect(mutex.getState().mapOfTasks.get(TOPIC1)?.maxQueueSize).toBe(10);
+  });
+
+  test("setMaxQueueSize should set the max queue size", () => {
+    mutex.setMaxQueueSize(10);
+    expect(mutex.getState().maxQueueSize).toBe(10);
+  });
+
+  test("aquire should throw QueueOverFlowError when the queue size is exceeded", async () => {
+    mutex.setMaxQueueSizeForTopic(TOPIC1, 1);
+    const cb = jest.fn();
+    mutex.aquire(TOPIC1, cb);
+    mutex.aquire(TOPIC1, cb);
+    await expect(mutex.aquire(TOPIC1, cb)).rejects.toThrow(QueueOverFlowError);
+  });
+
+  test("aquire should throw TimeoutError when the task timeout is exceeded", async () => {
+    const cb = async () => {
+      await delayMs(10);
+    };
+    const opts = { timeout: 1 };
+    try {
+      await mutex.aquire("topic", cb, opts);
+      expect(1).toBe(2);
+    } catch (e) {
+      expect(e).toBeInstanceOf(TimeoutError);
     }
-    memoryDiff = process.memoryUsage().heapUsed - initialMemoryUsage.heapUsed;
-    expect(memoryDiff).toBeLessThan(1024 * 1024 * 10); // 10MB
-    memoryDiff = process.memoryUsage().heapUsed - startHeapUsed;
-    expect(memoryDiff).toBeLessThan(1024 * 1024 * 20); // 20MB
+  });
+
+  test("exec should avoid race conditions case 1", async () => {
+    const data = {
+      count: 0,
+      increment: function () {
+        this.count = this.count + 1;
+      },
+    };
+    const spyIncrement = jest.spyOn(data, "increment");
+    await Promise.all([
+      mutex.aquire(TOPIC1, () => {
+        data.increment();
+      }),
+      mutex.aquire(TOPIC1, () => {
+        data.increment();
+      }),
+      mutex.aquire(TOPIC1, () => {
+        data.increment();
+      }),
+    ]);
+    expect(spyIncrement).toBeCalledTimes(3);
+    expect(data.count).toBe(3);
+  });
+  test("exec should avoid race conditions case 2 simultanious", async () => {
+    const data = {
+      count: 0,
+      increment: function () {
+        this.count = this.count + 1;
+      },
+    };
+    mutex.setMaxConcurrentTaskForTopic(TOPIC1, 3);
+    const spyIncrement = jest.spyOn(data, "increment");
+    await Promise.all([
+      mutex.aquire(TOPIC1, () => {
+        data.increment();
+      }),
+      mutex.aquire(TOPIC1, () => {
+        data.increment();
+      }),
+      mutex.aquire(TOPIC1, () => {
+        data.increment();
+      }),
+    ]);
+    expect(spyIncrement).toBeCalledTimes(3);
+    expect(data.count).toBe(3);
+  });
+
+  test("exec should avoid race conditions case 3 with delay", async () => {
+    const data = {
+      count: 0,
+      increment: async function () {
+        let c = this.count;
+        c += 1;
+        await delayMs(10);
+        this.count = c;
+      },
+    };
+    mutex.setMaxConcurrentTaskForTopic(TOPIC1, 1);
+    const spyIncrement = jest.spyOn(data, "increment");
+    await Promise.all([
+      mutex.aquire(TOPIC1, async () => {
+        await data.increment();
+      }),
+      mutex.aquire(TOPIC1, async () => {
+        await data.increment();
+      }),
+      mutex.aquire(TOPIC1, async () => {
+        await data.increment();
+      }),
+    ]);
+    expect(spyIncrement).toBeCalledTimes(3);
+    expect(data.count).toBe(3);
+
+    data.count = 0;
+    mutex.setMaxConcurrentTaskForTopic(TOPIC1, 3);
+    await Promise.all([
+      mutex.aquire(TOPIC1, async () => {
+        await data.increment();
+      }),
+      mutex.aquire(TOPIC1, async () => {
+        await data.increment();
+      }),
+      mutex.aquire(TOPIC1, async () => {
+        await data.increment();
+      }),
+    ]);
+    expect(spyIncrement).toBeCalledTimes(6);
+    expect(data.count).toBe(1);
+
+    data.count = 0;
+    mutex.setMaxConcurrentTaskForTopic(TOPIC1, 2);
+    await Promise.all([
+      mutex.aquire(TOPIC1, async () => {
+        await data.increment();
+      }),
+      mutex.aquire(TOPIC1, async () => {
+        await data.increment();
+      }),
+      mutex.aquire(TOPIC1, async () => {
+        await data.increment();
+      }),
+    ]);
+    expect(spyIncrement).toBeCalledTimes(9);
+    expect(data.count).toBe(2);
+  });
+
+  test("exec should avoid race conditions case 4 with delay", async () => {
+    const data = {
+      count: 0,
+      increment: async function () {
+        let c = this.count;
+        c += 1;
+        await delayMs(10);
+        this.count = c;
+      },
+    };
+    mutex.setMaxConcurrentTaskForTopic(TOPIC1, 1);
+
+    await Promise.all([data.increment(), data.increment(), data.increment(), data.increment()]);
+
+    expect(data.count).toBe(1);
+
+    data.count = 0;
+    await Promise.all([
+      mutex.aquire(TOPIC1, async () => {
+        await data.increment();
+      }),
+      mutex.aquire(TOPIC1, async () => {
+        await data.increment();
+      }),
+      mutex.aquire(TOPIC1, async () => {
+        await data.increment();
+      }),
+      mutex.aquire(TOPIC1, async () => {
+        await data.increment();
+      }),
+    ]);
+    expect(data.count).toBe(4);
+  });
+
+  test("Between different topics should not be a problem", async () => {
+    const data = {
+      count: 0,
+      increment: async function () {
+        let c = this.count;
+        c += 1;
+        await delayMs(10);
+        this.count = c;
+      },
+    };
+    mutex.setMaxConcurrentTaskForTopic(TOPIC1, 1);
+    mutex.setMaxConcurrentTaskForTopic(TOPIC2, 1);
+
+    await Promise.all([
+      mutex.aquire(TOPIC1, async () => {
+        await data.increment();
+      }),
+      mutex.aquire(TOPIC2, async () => {
+        await data.increment();
+      }),
+    ]);
+    expect(data.count).toBe(1);
+
+    data.count = 0;
+
+    await Promise.all([
+      mutex
+        .aquire(TOPIC1, async () => {
+          await data.increment();
+        })
+        .then(async () => {
+          await mutex.aquire(TOPIC2, async () => {
+            await data.increment();
+          });
+        }),
+    ]);
+    expect(data.count).toBe(2);
   });
 });
