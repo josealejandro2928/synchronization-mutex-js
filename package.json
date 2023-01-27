@@ -55,5 +55,16 @@
     "branches": [
       "master"
     ]
+  },
+  "homepage": "https://github.com/josealejandro2928/synchronization-mutex-js.git#readme",
+  "bugs": {
+    "url": "https://github.com/josealejandro2928/synchronization-mutex-js/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/josealejandro2928/synchronization-mutex-js.git"
   }
 }

@@ -24,6 +24,19 @@ export class Mutex {
         this.mapOfTasks = new Map();
         this.maxConcurrentTask = 1;
     }
+    /**
+     *
+     * @param topic
+     * @param cb
+     * @param opts
+     * @returns Promise<any>
+     * Adds a task to the queue for a given topic. The task will be a function cb, and it'll return a promise. The task will be executed in in asynchronous order
+     * an only the number of maxConcurrentTask configured by the topic or global will be the number of task that will run at the same time.
+     * By default the maxConcurrentTask = 1. Which garantees that only one task at the same time will be access to shared resources
+     * The opts parameter is an optional object that can contain the following properties:
+     *   timeout: a number that represents the maximum time in milliseconds that the task should take to resolve.
+     *   If the task takes longer than this, a TimeoutError will be thrown.
+     */
     aquire(topic, cb, opts = {}) {
         return new Promise((resolve, reject) => {
             const options = { ...this.defaultOps, ...opts };
@@ -123,6 +136,7 @@ export class Mutex {
     async enqueue(key) {
         ////////////////////// function definitions ///////////////////////////
         let timerId = null;
+        const topic = `${this.TASK_HAS_FINISHED}:topic::${key}`;
         const finalizeTask = (task) => {
             clearTimeout(timerId);
             if (task.finished)
@@ -148,7 +162,6 @@ export class Mutex {
                 });
             });
         };
-        const topic = `${this.TASK_HAS_FINISHED}:topic::${key}`;
         const queueTask = this.mapOfTasks?.get(key);
         if (!queueTask)
             throw new Error("Fatal error");
