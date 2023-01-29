@@ -24,8 +24,6 @@ class CounterState {
 
 
 async function main() {
-  mutex.setMaxConcurrentTaskForTopic("counter", 1);
-  mutex.setMaxQueueSizeForTopic("counter", 10);
 
   let counterState = new CounterState();
 
@@ -43,10 +41,11 @@ async function main() {
     console.log("error: ", error)
   })
 
+  const topic = "UPDATE_COUNTER_STATE"
   Promise.all([
-    mutex.aquire("counter", updateCounter),
-    mutex.aquire("counter", updateCounter),
-    mutex.aquire("counter", updateCounter),
+    mutex.aquire(topic, updateCounter),
+    mutex.aquire(topic, updateCounter),
+    mutex.aquire(topic, updateCounter),
   ]).then(() => {
     console.log("Global counter state: ", counterState.getCounter());
   }).catch((error) => {
