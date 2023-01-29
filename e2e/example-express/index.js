@@ -10,7 +10,6 @@ const { Mutex } = require("synchronization-mutex-js");
 
 const mutex = new Mutex();
 const UPDATE_VIEW_TOPIC = 'UPDATE_VIEW_TOPIC';
-mutex.setMaxConcurrentTaskForTopic(UPDATE_VIEW_TOPIC, 1);
 
 // Create an instance of the express application
 const app = express();
@@ -22,14 +21,9 @@ app.use(morgan('combined'));
 app.use(helmet());
 
 
-app.get('/websites', async (req, res) => {
-  let websites = await getWebSites();
-  res.json(websites);
-});
 
 
-const delayMs = (ms = 1000) => new Promise(res => setTimeout(res, ms));
-
+/////////////////// functions ///////////////////////
 async function getWebSites() {
   return new Promise((res, rej) => {
     fs.readFile("./websites.json", { encoding: "utf-8" }, (err, data) => {
@@ -40,21 +34,37 @@ async function getWebSites() {
 
     })
   })
-
 }
 
-app.post('/websites', async (req, res) => {
-  const { name, description } = req.body;
-  const website = new WebSite(name, description);
-  let websites = await getWebSites();
-  websites.push(website);
-  fs.writeFile('./websites.json', JSON.stringify(websites), (err) => {
-    if (err) {
-      return res.status(404).send('The website with the given ID was not found.');
-    } else {
-      res.json(website);
-    }
+async function setWebsites(websites = []) {
+  return new Promise((resolve, reject) => {
+    fs.writeFile('./websites.json', JSON.stringify(websites), (err) => {
+      if (err) {
+        return reject(err);
+      } else {
+        return resolve(true);
+      }
+    })
   })
+}
+
+/////////////////////////ROUTES//////////////////////////////////////////
+app.get('/websites', async (req, res) => {
+  let websites = await getWebSites();
+  res.json(websites);
+});
+
+app.post('/websites', async (req, res) => {
+  try {
+    const { name, description } = req.body;
+    const website = new WebSite(name, description);
+    let websites = await getWebSites();
+    websites.push(website);
+    await setWebsites(websites)
+    return res.status(201).json(website);
+  } catch (error) {
+    return res.status(400).json(error);
+  }
 });
 
 app.get('/websites/:id', async (req, res) => {
@@ -67,41 +77,33 @@ app.get('/websites/:id', async (req, res) => {
 });
 
 app.get('/websites/:id/view', async (req, res) => {
-  let websites = await getWebSites();
-  const website = websites.find(w => w.id === parseInt(req.params.id))
-  if (!website) {
-    return res.status(404).send('The website with the given ID was not found.');
-  }
-  website.visits++;
-  fs.writeFile('./websites.json', JSON.stringify(websites), (err) => {
-    if (err) {
+  try {
+    let websites = await getWebSites();
+    const website = websites.find(w => w.id === parseInt(req.params.id))
+    if (!website) {
       return res.status(404).send('The website with the given ID was not found.');
-    } else {
-      res.json(website);
     }
-  })
+    website.visits++;
+    await setWebsites(websites);
+    res.json(website);
+  } catch (error) {
+    return res.status(400).json(error);
+  }
 });
 
 app.get('/websites/:id/view_mutex', async (req, res) => {
   try {
-    let website = await mutex.aquire(UPDATE_VIEW_TOPIC, async () => {
+    let websiteUpdated = await mutex.aquire(`${UPDATE_VIEW_TOPIC}`, async () => {
       let websites = await getWebSites();
       const website = websites.find(w => w.id === parseInt(req.params.id))
       if (!website) {
         return res.status(404).send('The website with the given ID was not found.');
       }
       website.visits++;
-      return new Promise((res, rej) => {
-        fs.writeFile('./websites.json', JSON.stringify(websites), (err) => {
-          if (err) {
-            rej(err);
-          } else {
-            res(website);
-          }
-        })
-      })
-    })
-    res.status(201).json(website);
+      await setWebsites(websites);
+      return website;
+    }, { timeout: undefined })
+    res.status(201).json(websiteUpdated);
   } catch (e) {
     return res.status(400).send(e.message);
   }

@@ -1,10 +1,10 @@
 class WebSite {
-  static id = 0
+  static id = 1
   constructor(name, description, visits = 0) {
     this.name = name;
     this.description = description;
     this.visits = visits;
-    this.id = WebSite.id + 1
+    this.id = WebSite.id++;
   }
 }
 let websitesSeed = [
