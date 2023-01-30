@@ -11,7 +11,7 @@ npm install synchronization-mutex-js --save
 or using yarn
 
 ```sh
-npm install synchronization-mutex-js --save
+yarn add synchronization-mutex-js
 ```
 
 ## Usage
@@ -40,6 +40,13 @@ mutex.aquire(
   { timeout: 3000 }
 );
 ```
+
+## Testing
+
+**We have run several unit tests that cover error handling, expected behavior, rejections, memory leaks, concurrency states, and more. Here I share with you a snapshot of coverage with jest:**
+
+<img src="./images/coverange.png" height=200/>
+
 
 ## API
 
@@ -169,6 +176,10 @@ leading to potential race conditions or unexpected behavior. Some use cases for 
 3. Implementing critical sections of code, where only one thread can execute at a time, to ensure that the shared state is consistent.
 
 4. Implementing locking mechanisms in concurrent programs to prevent race conditions and ensure data consistency.
+
+## Stackblitz examples
+
+#### [stackblitz example in a node app](https://stackblitz.com/edit/example-synchronization-mutex-js?file=index.js)
 
 ## License
 
