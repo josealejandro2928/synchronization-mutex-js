@@ -110,3 +110,5 @@ lib
 
 python/file*.txt
 __pycache__/
+
+src/build

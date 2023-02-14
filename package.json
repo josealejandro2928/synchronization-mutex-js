@@ -1,7 +1,7 @@
 {
   "name": "synchronization-mutex-js",
   "version": "0.0.2",
-  "description": "A simple package that will implement classes useful for dealing with syncronization problems in JS, like concurrency and race conditions",
+  "description": "A simple package that will implement classes useful for dealing with synchronization problems in JS, like concurrency and race conditions",
   "exports": {
     ".": {
       "import": {
@@ -20,6 +20,8 @@
     "build/**/*"
   ],
   "scripts": {
+    "start": "node ./src/build/src/index.js",
+    "dev": "rm -rf ./src/build && tsc -p ./src/tsconfig.app.json -w",
     "build": "yarn run clean && yarn run build:esm && yarn run build:cjs",
     "build:esm": "tsc -p ./configs/tsconfig.esm.json && mv build/esm/index.js build/esm/index.mjs",
     "build:cjs": "tsc -p ./configs/tsconfig.cjs.json",
@@ -30,7 +32,7 @@
   "keywords": [
     "typescript",
     "mutex",
-    "syncronization",
+    "synchronization",
     "concurrency"
   ],
   "author": "Jose Alejandro Concepcion Alvarez",
