@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { EventEmitterCustom } from "./event-emitter";
 export class QueueOverFlowError extends Error {
     constructor(topic) {
         super(`Queue out of range in this moment for topic: ${topic}, the task is rejected`);
@@ -11,7 +9,6 @@ export class TimeoutError extends Error {
     }
 }
 export class Mutex {
-    eventEmitter;
     mapOfTasks;
     maxConcurrentTask = 1;
     maxQueueSize = 50;
@@ -20,7 +17,6 @@ export class Mutex {
         timeout: 3 * 10 * 1000, // default timeout for the task;
     };
     constructor() {
-        this.eventEmitter = new EventEmitterCustom();
         this.mapOfTasks = new Map();
         this.maxConcurrentTask = 1;
     }
@@ -133,16 +129,13 @@ export class Mutex {
             this.mapOfTasks.get(topic).maxConcurrentTask = maxConcurrentTask;
         }
     }
-    async enqueue(key) {
+    enqueue(key) {
         ////////////////////// function definitions ///////////////////////////
         let timerId = null;
-        const topic = `${this.TASK_HAS_FINISHED}:topic::${key}`;
         const finalizeTask = (task) => {
             clearTimeout(timerId);
-            if (task.finished)
-                return;
             task.finished = true;
-            this.eventEmitter.emit(topic, null);
+            process.nextTick(() => this.enqueue(key));
         };
         const executorTask = (task, signal) => {
             return new Promise((resolve, reject) => {
@@ -165,39 +158,29 @@ export class Mutex {
         const queueTask = this.mapOfTasks?.get(key);
         if (!queueTask)
             throw new Error("Fatal error");
-        if (queueTask.runningTask.size >= queueTask.maxConcurrentTask) {
-            this.eventEmitter.once(topic, () => {
-                this.enqueue(key);
-            });
-            return;
-        }
-        const currentTask = queueTask.queue.shift();
-        if (!currentTask)
-            return;
-        queueTask.runningTask.add(currentTask);
-        const controller = new AbortController();
-        const signal = controller.signal;
-        if (currentTask.opts.timeout != null) {
-            timerId = setTimeout(() => {
-                controller.abort();
-            }, currentTask.opts.timeout);
-        }
-        try {
-            const result = await executorTask(currentTask, signal);
-            queueTask.runningTask.delete(currentTask);
-            currentTask.onResolveCb(null, result);
-        }
-        catch (err) {
-            queueTask.runningTask.delete(currentTask);
-            currentTask.onResolveCb(err, null);
-        }
-        finally {
-            finalizeTask(currentTask);
+        while (queueTask.runningTask.size < queueTask.maxConcurrentTask && queueTask.queue.length > 0) {
+            const currentTask = queueTask.queue.shift();
+            queueTask.runningTask.add(currentTask);
+            const controller = new AbortController();
+            const signal = controller.signal;
+            if (currentTask.opts.timeout != null) {
+                timerId = setTimeout(() => {
+                    controller.abort();
+                }, currentTask.opts.timeout);
+            }
+            executorTask(currentTask, signal)
+                .then((result) => {
+                queueTask.runningTask.delete(currentTask);
+                currentTask.onResolveCb(null, result);
+            }, (err) => {
+                queueTask.runningTask.delete(currentTask);
+                currentTask.onResolveCb(err, null);
+            })
+                .finally(() => finalizeTask(currentTask));
         }
     }
     getState() {
         return {
-            eventEmitter: this.eventEmitter,
             mapOfTasks: this.mapOfTasks,
             maxConcurrentTask: this.maxConcurrentTask,
             maxQueueSize: this.maxQueueSize,

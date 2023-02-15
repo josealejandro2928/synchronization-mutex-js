@@ -1,17 +1,6 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Mutex = exports.TimeoutError = exports.QueueOverFlowError = void 0;
-/* eslint-disable @typescript-eslint/no-explicit-any */
-const event_emitter_1 = require("./event-emitter");
 class QueueOverFlowError extends Error {
     constructor(topic) {
         super(`Queue out of range in this moment for topic: ${topic}, the task is rejected`);
@@ -32,7 +21,6 @@ class Mutex {
         this.defaultOps = {
             timeout: 3 * 10 * 1000, // default timeout for the task;
         };
-        this.eventEmitter = new event_emitter_1.EventEmitterCustom();
         this.mapOfTasks = new Map();
         this.maxConcurrentTask = 1;
     }
@@ -148,47 +136,36 @@ class Mutex {
     }
     enqueue(key) {
         var _a;
-        return __awaiter(this, void 0, void 0, function* () {
-            ////////////////////// function definitions ///////////////////////////
-            let timerId = null;
-            const topic = `${this.TASK_HAS_FINISHED}:topic::${key}`;
-            const finalizeTask = (task) => {
-                clearTimeout(timerId);
-                if (task.finished)
-                    return;
-                task.finished = true;
-                this.eventEmitter.emit(topic, null);
-            };
-            const executorTask = (task, signal) => {
-                return new Promise((resolve, reject) => {
-                    const abortHandler = () => {
-                        clearTimeout(timerId);
-                        reject(new TimeoutError(task));
-                    };
-                    signal === null || signal === void 0 ? void 0 : signal.addEventListener("abort", abortHandler);
-                    Promise.resolve(task.fn())
-                        .then((result) => {
-                        signal === null || signal === void 0 ? void 0 : signal.removeEventListener("abort", abortHandler);
-                        resolve(result);
-                    })
-                        .catch((error) => {
-                        signal === null || signal === void 0 ? void 0 : signal.removeEventListener("abort", abortHandler);
-                        reject(error);
-                    });
+        ////////////////////// function definitions ///////////////////////////
+        let timerId = null;
+        const finalizeTask = (task) => {
+            clearTimeout(timerId);
+            task.finished = true;
+            process.nextTick(() => this.enqueue(key));
+        };
+        const executorTask = (task, signal) => {
+            return new Promise((resolve, reject) => {
+                const abortHandler = () => {
+                    clearTimeout(timerId);
+                    reject(new TimeoutError(task));
+                };
+                signal === null || signal === void 0 ? void 0 : signal.addEventListener("abort", abortHandler);
+                Promise.resolve(task.fn())
+                    .then((result) => {
+                    signal === null || signal === void 0 ? void 0 : signal.removeEventListener("abort", abortHandler);
+                    resolve(result);
+                })
+                    .catch((error) => {
+                    signal === null || signal === void 0 ? void 0 : signal.removeEventListener("abort", abortHandler);
+                    reject(error);
                 });
-            };
-            const queueTask = (_a = this.mapOfTasks) === null || _a === void 0 ? void 0 : _a.get(key);
-            if (!queueTask)
-                throw new Error("Fatal error");
-            if (queueTask.runningTask.size >= queueTask.maxConcurrentTask) {
-                this.eventEmitter.once(topic, () => {
-                    this.enqueue(key);
-                });
-                return;
-            }
+            });
+        };
+        const queueTask = (_a = this.mapOfTasks) === null || _a === void 0 ? void 0 : _a.get(key);
+        if (!queueTask)
+            throw new Error("Fatal error");
+        while (queueTask.runningTask.size < queueTask.maxConcurrentTask && queueTask.queue.length > 0) {
             const currentTask = queueTask.queue.shift();
-            if (!currentTask)
-                return;
             queueTask.runningTask.add(currentTask);
             const controller = new AbortController();
             const signal = controller.signal;
@@ -197,23 +174,19 @@ class Mutex {
                     controller.abort();
                 }, currentTask.opts.timeout);
             }
-            try {
-                const result = yield executorTask(currentTask, signal);
+            executorTask(currentTask, signal)
+                .then((result) => {
                 queueTask.runningTask.delete(currentTask);
                 currentTask.onResolveCb(null, result);
-            }
-            catch (err) {
+            }, (err) => {
                 queueTask.runningTask.delete(currentTask);
                 currentTask.onResolveCb(err, null);
-            }
-            finally {
-                finalizeTask(currentTask);
-            }
-        });
+            })
+                .finally(() => finalizeTask(currentTask));
+        }
     }
     getState() {
         return {
-            eventEmitter: this.eventEmitter,
             mapOfTasks: this.mapOfTasks,
             maxConcurrentTask: this.maxConcurrentTask,
             maxQueueSize: this.maxQueueSize,

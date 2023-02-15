@@ -1,4 +1,3 @@
-import { EventEmitterCustom } from "./event-emitter";
 interface ITask {
     fn: (...args: any[]) => any;
     opts: ITaskOption;
@@ -21,7 +20,6 @@ export declare class TimeoutError extends Error {
     constructor(task: ITask);
 }
 export declare class Mutex {
-    private eventEmitter;
     private mapOfTasks;
     private maxConcurrentTask;
     private maxQueueSize;
@@ -72,7 +70,6 @@ export declare class Mutex {
     setMaxConcurrentTaskForTopic(topic: string, maxConcurrentTask?: number): void;
     private enqueue;
     getState(): {
-        eventEmitter: EventEmitterCustom;
         mapOfTasks: Map<string, IQueueTask>;
         maxConcurrentTask: number;
         maxQueueSize: number;
