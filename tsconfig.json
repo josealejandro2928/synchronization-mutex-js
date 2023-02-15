@@ -1,4 +1,7 @@
 {
   "extends": "./node_modules/gts/tsconfig-google.json",
+  "compilerOptions": {
+    "esModuleInterop": true
+  },
   "include": ["lib/**/*.ts", "test/**/*.ts", "src/**/*.ts"]
 }

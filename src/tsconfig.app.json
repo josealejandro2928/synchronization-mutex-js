@@ -5,7 +5,8 @@
     "target": "ES6",
     "module": "CommonJS",
     "moduleResolution": "Node",
-    "outDir": "./build/"
+    "outDir": "./build/",
+    "esModuleInterop": true
   },
   "include": ["./**/*.ts"]
 }

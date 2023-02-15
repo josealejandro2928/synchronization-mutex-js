@@ -1,5 +1,7 @@
 import { Mutex, QueueOverFlowError, TimeoutError } from "../lib/index";
 
+const waitForCurrentEventLoopPhase = () => new Promise(r => setImmediate(() => r(true)));
+
 describe("Pool", () => {
   let mutex: Mutex;
   const TOPIC1 = "TOPIC1";
@@ -29,13 +31,14 @@ describe("Pool", () => {
     ).rejects.toThrow("Custom Error");
   });
 
-  test("aquire should add a new task to the topic", () => {
+  test("aquire should add a new task to the topic", async () => {
     const cb = async () => {
       await delayMs(50);
     };
 
     mutex.aquire(TOPIC1, cb);
     expect(mutex.getState().mapOfTasks.get(TOPIC1)?.queue.length).toBe(0);
+    await waitForCurrentEventLoopPhase();
     expect(mutex.getState().mapOfTasks.get(TOPIC1)?.runningTask.size).toBe(1);
   });
 
@@ -92,7 +95,7 @@ describe("Pool", () => {
     expect(spyIncrement).toBeCalledTimes(3);
     expect(data.count).toBe(3);
   });
-  test("exec should avoid race conditions case 2 simultanious", async () => {
+  test("exec should avoid race conditions case 2 simultaneous", async () => {
     const data = {
       count: 0,
       increment: function () {

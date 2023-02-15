@@ -21,13 +21,13 @@
   ],
   "scripts": {
     "start": "node ./src/build/src/index.js",
-    "dev": "rm -rf ./src/build && tsc -p ./src/tsconfig.app.json -w",
+    "dev": "rm -rf ./src/build  &&  tsc -p ./src/tsconfig.app.json -w ",
     "build": "yarn run clean && yarn run build:esm && yarn run build:cjs",
     "build:esm": "tsc -p ./configs/tsconfig.esm.json && mv build/esm/index.js build/esm/index.mjs",
     "build:cjs": "tsc -p ./configs/tsconfig.cjs.json",
     "lint": "yarn run eslint",
     "clean": "rm -rf ./build",
-    "test": "jest"
+    "test": "jest --detectOpenHandles"
   },
   "keywords": [
     "typescript",
