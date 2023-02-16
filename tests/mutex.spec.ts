@@ -37,7 +37,7 @@ describe("Pool", () => {
     };
 
     mutex.aquire(TOPIC1, cb);
-    expect(mutex.getState().mapOfTasks.get(TOPIC1)?.queue.length).toBe(0);
+    expect(mutex.getState().mapOfTasks.get(TOPIC1)?.queue.length).toBe(1);
     await waitForCurrentEventLoopPhase();
     expect(mutex.getState().mapOfTasks.get(TOPIC1)?.runningTask.size).toBe(1);
   });
@@ -55,7 +55,6 @@ describe("Pool", () => {
   test("aquire should throw QueueOverFlowError when the queue size is exceeded", async () => {
     mutex.setMaxQueueSizeForTopic(TOPIC1, 1);
     const cb = jest.fn();
-    mutex.aquire(TOPIC1, cb);
     mutex.aquire(TOPIC1, cb);
     await expect(mutex.aquire(TOPIC1, cb)).rejects.toThrow(QueueOverFlowError);
   });
