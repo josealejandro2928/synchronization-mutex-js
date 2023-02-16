@@ -1,6 +1,6 @@
 {
   "name": "synchronization-mutex-js",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "A simple package that will implement classes useful for dealing with synchronization problems in JS, like concurrency and race conditions",
   "exports": {
     ".": {
