@@ -17,7 +17,6 @@ class Mutex {
     constructor() {
         this.maxConcurrentTask = 1;
         this.maxQueueSize = 50;
-        this.TASK_HAS_FINISHED = "TASK_HAS_FINISHED";
         this.defaultOps = {
             timeout: 3 * 10 * 1000, // default timeout for the task;
         };
@@ -54,7 +53,7 @@ class Mutex {
                 finished: false,
             };
             this.addNewTaskToTopic(topic, newTask);
-            this.enqueue(topic);
+            process.nextTick(() => this.enqueue(topic));
         });
     }
     addNewTaskToTopic(topic, task) {
@@ -138,10 +137,11 @@ class Mutex {
         var _a;
         ////////////////////// function definitions ///////////////////////////
         let timerId = null;
+        const queueTask = (_a = this.mapOfTasks) === null || _a === void 0 ? void 0 : _a.get(key);
         const finalizeTask = (task) => {
             clearTimeout(timerId);
             task.finished = true;
-            process.nextTick(() => this.enqueue(key));
+            this.enqueue(key);
         };
         const executorTask = (task, signal) => {
             return new Promise((resolve, reject) => {
@@ -161,29 +161,28 @@ class Mutex {
                 });
             });
         };
-        const queueTask = (_a = this.mapOfTasks) === null || _a === void 0 ? void 0 : _a.get(key);
         if (!queueTask)
             throw new Error("Fatal error");
-        while (queueTask.runningTask.size < queueTask.maxConcurrentTask && queueTask.queue.length > 0) {
-            const currentTask = queueTask.queue.shift();
-            queueTask.runningTask.add(currentTask);
-            const controller = new AbortController();
-            const signal = controller.signal;
-            if (currentTask.opts.timeout != null) {
-                timerId = setTimeout(() => {
-                    controller.abort();
-                }, currentTask.opts.timeout);
-            }
-            executorTask(currentTask, signal)
-                .then((result) => {
-                queueTask.runningTask.delete(currentTask);
-                currentTask.onResolveCb(null, result);
-            }, (err) => {
-                queueTask.runningTask.delete(currentTask);
-                currentTask.onResolveCb(err, null);
-            })
-                .finally(() => finalizeTask(currentTask));
+        if (queueTask.runningTask.size >= queueTask.maxConcurrentTask || queueTask.queue.length == 0)
+            return;
+        const currentTask = queueTask.queue.shift();
+        queueTask.runningTask.add(currentTask);
+        const controller = new AbortController();
+        const signal = controller.signal;
+        if (currentTask.opts.timeout != null) {
+            timerId = setTimeout(() => {
+                controller.abort();
+            }, currentTask.opts.timeout);
         }
+        executorTask(currentTask, signal)
+            .then((result) => {
+            queueTask.runningTask.delete(currentTask);
+            currentTask.onResolveCb(null, result);
+        }, (err) => {
+            queueTask.runningTask.delete(currentTask);
+            currentTask.onResolveCb(err, null);
+        })
+            .finally(() => finalizeTask(currentTask));
     }
     getState() {
         return {

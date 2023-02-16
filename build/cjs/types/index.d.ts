@@ -23,7 +23,6 @@ export declare class Mutex {
     private mapOfTasks;
     private maxConcurrentTask;
     private maxQueueSize;
-    private TASK_HAS_FINISHED;
     private defaultOps;
     constructor();
     /**
